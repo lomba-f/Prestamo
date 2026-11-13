@@ -112,6 +112,11 @@ jobs:
               }
           }
           E
+      - name: Icono
+        run: |
+          mkdir -p app/src/main/res/drawable
+          cp icon.jpg app/src/main/res/drawable/icon.jpg
+          sed -i 's|<application |<application android:icon="@drawable/icon" |' app/src/main/AndroidManifest.xml
       - run: gradle assembleDebug
       - uses: actions/upload-artifact@v4
         with: { name: MisPrestamos-apk, path: app/build/outputs/apk/debug/app-debug.apk }
