@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Mis Préstamos</title>
+<style>
+:root{--bg:#F3F5F2;--sf:#fff;--ink:#12201C;--mu:#5B6B66;--ac:#0B6B57;--acw:#fff;--wa:#B45309;--bad:#B3261E;--ln:#D9E0DC;color-scheme:light}
+@media(prefers-color-scheme:dark){:root{--bg:#0F1714;--sf:#17221E;--ink:#E8EFEC;--mu:#93A59E;--ac:#3CC4A3;--acw:#08201A;--wa:#E8A15A;--bad:#F08A80;--ln:#26352F;color-scheme:dark}}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font:16px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;padding:max(16px,env(safe-area-inset-top)) 16px calc(76px + env(safe-area-inset-bottom));max-width:640px;margin:0 auto;font-variant-numeric:tabular-nums}
+h1{font-size:15px;margin:0 0 12px;color:var(--mu);font-weight:600}
+h2{font-size:17px;margin:22px 0 8px}
+small{display:block;color:var(--mu);font-size:13px}
+.hero{background:var(--ac);color:var(--acw);border-radius:14px;padding:18px}
+.hero .big{font-size:38px;font-weight:700;letter-spacing:-.5px;margin:2px 0 12px}
+.hero .big.neg{color:#FFD7D2}
+.row{display:flex;gap:8px}
+.row input{flex:1;min-width:0}
+.hero input{background:rgba(255,255,255,.16);border:0;color:inherit}
+.hero input::placeholder{color:inherit;opacity:.7}
+.hero button{background:var(--acw);color:var(--ac)}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px}
+.two div{background:var(--sf);border:1px solid var(--ln);border-radius:12px;padding:12px}
+.two span{font-size:13px;color:var(--mu);display:block}
+.two b{font-size:20px}
+input,select,textarea{width:100%;font:inherit;color:var(--ink);background:var(--sf);border:1px solid var(--ln);border-radius:10px;padding:11px 12px}
+textarea{min-height:70px}
+label{display:block;font-size:13px;color:var(--mu);margin:12px 0 4px}
+button{font:inherit;font-weight:600;border:0;border-radius:10px;padding:10px 14px;background:var(--ac);color:var(--acw)}
+button.ghost{background:transparent;color:var(--ac);border:1px solid var(--ln)}
+button.bad{background:transparent;color:var(--bad);border:1px solid var(--ln)}
+:focus-visible{outline:3px solid var(--wa);outline-offset:2px}
+.q{display:grid;grid-template-columns:1fr auto auto;gap:10px;align-items:center;background:var(--sf);border:1px solid var(--ln);border-left:5px solid var(--ln);border-radius:10px;padding:10px 12px;margin-bottom:8px}
+.q.late{border-left-color:var(--bad)}.q.today{border-left-color:var(--wa)}.q.ok{border-left-color:var(--ac);opacity:.75}
+.q .amt{font-weight:700}
+.card{background:var(--sf);border:1px solid var(--ln);border-radius:12px;margin-bottom:10px;overflow:hidden}
+.top{display:flex;justify-content:space-between;gap:10px;padding:13px 14px;cursor:pointer}
+.r{text-align:right}
+.det{padding:4px 14px 14px;border-top:1px solid var(--ln)}
+.det p{margin:8px 0;font-size:14px}
+.bar{margin-bottom:12px}.bar select{width:auto}
+.empty{color:var(--mu);text-align:center;padding:28px 8px}
+.prev{margin-top:12px;padding:12px;border-radius:10px;background:var(--sf);border:1px dashed var(--ln);font-size:14px}
+.err{color:var(--bad);font-size:14px;min-height:20px;margin:8px 0}
+.acts{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+nav{position:fixed;left:0;right:0;bottom:0;display:flex;background:var(--sf);border-top:1px solid var(--ln);padding-bottom:env(safe-area-inset-bottom)}
+nav button{flex:1;background:none;color:var(--mu);border-radius:0;padding:14px 4px;font-size:14px}
+nav button.on{color:var(--ac);box-shadow:inset 0 3px 0 var(--ac)}
+</style></head>
+<body>
+<h1>Mis Préstamos</h1>
+<main id="app"></main>
+<nav>
+<button data-t="inicio" onclick="go('inicio')">Inicio</button>
+<button data-t="lista" onclick="go('lista')">Préstamos</button>
+<button data-t="nuevo" onclick="go('nuevo')">Nuevo</button>
+<button data-t="ajustes" onclick="go('ajustes')">Ajustes</button>
+</nav>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script>
+const $=s=>document.querySelector(s);
+let S=null;try{S=JSON.parse(localStorage.getItem('prest')||'null')}catch(e){}
+S=S||{caja:0,lender:{},loans:[]};
+const save=()=>{try{localStorage.setItem('prest',JSON.stringify(S))}catch(e){}};
+const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const money=n=>(n<0?'-$ ':'$ ')+Math.abs(Math.round(n)).toLocaleString('es-AR');
+const pd=s=>{const[a,b,c]=s.split('-');return new Date(a,b-1,c)};
+const iso=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+const fd=s=>{const[a,b,c]=s.split('-');return c+'/'+b+'/'+a};
+const today=()=>iso(new Date());
+function due(first,freq,k){const d=pd(first);if(freq==='mensual'){const day=d.getDate();d.setDate(1);d.setMonth(d.getMonth()+k);const last=new Date(d.getFullYear(),d.getMonth()+1,0).getDate();d.setDate(Math.min(day,last))}else d.setDate(d.getDate()+(freq==='semanal'?7:15)*k);return iso(d)}
+const unpaid=l=>l.cuotas.filter(c=>!c.paid);
+const saldo=l=>unpaid(l).reduce((a,c)=>a+c.amt,0);
+const nextDue=l=>(unpaid(l)[0]||{due:'9999'}).due;
+const capPend=l=>l.capital*unpaid(l).length/l.cuotas.length;
+const FREQ={semanal:'semanales',quincenal:'quincenales',mensual:'mensuales'};
+let tab='inicio',sel=null,sort='venc',delArm=null;
+
+function go(t){tab=t;sel=null;delArm=null;render();window.scrollTo(0,0)}
+function render(){
+ document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('on',b.dataset.t===tab));
+ $('#app').innerHTML=({inicio:vInicio,lista:vLista,nuevo:vNuevo,ajustes:vAjustes})[tab]();
+ if(tab==='nuevo')initNuevo();
+}
+function qrow(l,i,nm){
+ const c=l.cuotas[i],t=today(),cl=c.paid?'ok':c.due<t?'late':c.due===t?'today':'';
+ const n='Cuota '+(i+1)+' de '+l.cuotas.length;
+ const sub=c.paid?'cobrada el '+fd(c.paid):'vence el '+fd(c.due)+(cl==='late'?' (vencida)':'');
+ return `<div class="q ${cl}"><div><b>${nm?esc(l.name):n}</b><small>${nm?n+', ':''}${sub}</small></div><div class="amt">${money(c.amt)}</div><button class="${c.paid?'ghost':''}" onclick="pay('${l.id}',${i})">${c.paid?'Deshacer':'Cobrar'}</button></div>`}
+function pay(id,i){const l=S.loans.find(x=>x.id==id),c=l.cuotas[i];if(c.paid){c.paid=null;S.caja-=c.amt}else{c.paid=today();S.caja+=c.amt}save();render()}
+function mov(s){const v=parseFloat($('#mv').value);if(!(v>0))return;S.caja+=s*v;save();render()}
+
+function vInicio(){
+ const pend=S.loans.reduce((a,l)=>a+capPend(l),0),cob=S.loans.reduce((a,l)=>a+saldo(l),0);
+ const q=[];S.loans.forEach(l=>l.cuotas.forEach((c,i)=>{if(!c.paid)q.push({l,i,d:c.due})}));
+ q.sort((a,b)=>a.d.localeCompare(b.d));
+ return `<section class="hero"><small style="color:inherit;opacity:.8">Disponible en caja</small><div class="big ${S.caja<0?'neg':''}">${money(S.caja)}</div>
+ <div class="row"><input id="mv" type="number" inputmode="decimal" placeholder="Monto"><button onclick="mov(1)">Ingresar</button><button onclick="mov(-1)">Retirar</button></div></section>
+ <div class="two"><div><span>Prestado en la calle</span><b>${money(pend)}</b></div><div><span>A cobrar</span><b>${money(cob)}</b></div></div>
+ <h2>Próximos cobros</h2>`+(q.slice(0,20).map(x=>qrow(x.l,x.i,true)).join('')||'<p class="empty">No hay cobros pendientes.</p>')}
+
+function vLista(){
+ const a=[...S.loans];
+ a.sort((x,y)=>sort==='monto'?y.capital-x.capital:sort==='nombre'?x.name.localeCompare(y.name):sort==='fecha'?y.date.localeCompare(x.date):nextDue(x).localeCompare(nextDue(y)));
+ const o=(v,t)=>`<option value="${v}" ${sort===v?'selected':''}>${t}</option>`;
+ return `<div class="bar"><label style="margin:0">Ordenar por<select onchange="sort=this.value;render()">${o('venc','Próximo vencimiento')}${o('fecha','Fecha del préstamo')}${o('monto','Monto prestado')}${o('nombre','Nombre')}</select></label></div>`+(a.map(card).join('')||'<p class="empty">Todavía no hay préstamos. Creá el primero en “Nuevo”.</p>')}
+function card(l){
+ const o=sel===l.id,s=saldo(l),nd=unpaid(l)[0];
+ let h=`<article class="card"><div class="top" onclick="sel=sel==='${l.id}'?null:'${l.id}';delArm=null;render()"><div><b>${esc(l.name)}</b><small>${esc(l.tel)}</small></div><div class="r"><b>${s?money(s):'Cancelado'}</b><small>${nd?'vence el '+fd(nd.due):''}</small></div></div>`;
+ if(o){h+=`<div class="det"><p>DNI ${esc(l.dni)||'sin cargar'}<br>${esc(l.addr)||'Sin domicilio'}</p>
+ <p>Capital ${money(l.capital)}, interés ${l.rate}%, total ${money(l.total)}<br>${l.cuotas.length} cuotas ${FREQ[l.freq]}, prestado el ${fd(l.date)}</p>`+
+ l.cuotas.map((c,i)=>qrow(l,i,false)).join('')+
+ `<div class="acts"><button onclick="pdf('${l.id}')">Descargar contrato PDF</button><button class="bad" onclick="del('${l.id}')">${delArm===l.id?'Confirmar: eliminar y ajustar caja':'Eliminar'}</button></div></div>`}
+ return h+'</article>'}
+function del(id){if(delArm!==id){delArm=id;render();return}const l=S.loans.find(x=>x.id==id);S.caja+=l.capital-l.cuotas.filter(c=>c.paid).reduce((a,c)=>a+c.amt,0);S.loans=S.loans.filter(x=>x.id!=id);delArm=null;sel=null;save();render()}
+
+function vNuevo(){
+ const f=(i,t,ty,ex)=>`<label for="${i}">${t}</label><input id="${i}" type="${ty||'text'}" ${ex||''}>`;
+ return `<h2 style="margin-top:0">Nuevo préstamo</h2>
+ ${f('name','Nombre y apellido del deudor')}${f('dni','DNI','text','inputmode="numeric"')}${f('tel','Teléfono','tel')}${f('addr','Domicilio')}
+ ${f('capital','Monto prestado','number','inputmode="decimal" oninput="prev()"')}${f('rate','Interés total sobre el capital (%)','number','inputmode="decimal" value="0" oninput="prev()"')}
+ <label for="freq">Frecuencia de pago</label><select id="freq" onchange="auto();prev()"><option value="semanal">Semanal</option><option value="quincenal">Quincenal</option><option value="mensual" selected>Mensual</option></select>
+ ${f('n','Cantidad de cuotas','number','inputmode="numeric" value="1" oninput="prev()"')}
+ <label for="date">Fecha del préstamo</label><input id="date" type="date" onchange="auto();prev()">
+ <label for="first">Primer vencimiento</label><input id="first" type="date" onchange="prev()">
+ <label for="extra">Cláusula adicional para el contrato (opcional)</label><textarea id="extra" placeholder="Ej.: intereses por mora, garantías"></textarea>
+ <div class="prev" id="prev"></div><div class="err" id="err"></div><button onclick="crear()" style="width:100%">Crear préstamo</button>`}
+function initNuevo(){$('#date').value=today();auto();prev()}
+function auto(){$('#first').value=due($('#date').value||today(),$('#freq').value,1)}
+function prev(){const c=parseFloat($('#capital').value)||0,r=parseFloat($('#rate').value)||0,n=parseInt($('#n').value)||1,t=Math.round(c*(1+r/100));$('#prev').innerHTML=`Total a devolver: <b>${money(t)}</b><br>${n} cuota${n>1?'s':''} de <b>${money(Math.floor(t/n))}</b>`}
+function crear(){
+ const g=i=>$('#'+i).value.trim(),cap=parseFloat(g('capital')),n=parseInt(g('n')),r=parseFloat(g('rate'))||0;
+ if(!g('name')||!(cap>0)||!(n>0)||!g('first')||!g('date')){$('#err').textContent='Completá nombre, monto, cuotas y fechas.';return}
+ const total=Math.round(cap*(1+r/100)),base=Math.floor(total/n),freq=g('freq');
+ const cuotas=[...Array(n)].map((_,k)=>({due:due(g('first'),freq,k),amt:k===n-1?total-base*(n-1):base,paid:null}));
+ const l={id:String(Date.now()),date:g('date'),name:g('name'),dni:g('dni'),tel:g('tel'),addr:g('addr'),capital:cap,rate:r,freq,total,extra:g('extra'),cuotas};
+ S.loans.push(l);S.caja-=cap;save();tab='lista';sel=l.id;render();window.scrollTo(0,0)}
+
+function vAjustes(){
+ const L=S.lender,f=(i,t)=>`<label for="${i}">${t}</label><input id="${i}" value="${esc(L[i])}">`;
+ return `<h2 style="margin-top:0">Tus datos (prestamista)</h2><small>Aparecen en todos los contratos.</small>
+ ${f('name','Nombre y apellido')}${f('dni','DNI')}${f('addr','Domicilio')}${f('tel','Teléfono')}${f('city','Ciudad donde se firma')}
+ <div class="acts"><button onclick="saveL()">Guardar datos</button></div><div class="err" id="err"></div>
+ <h2>Copia de seguridad</h2><small>Exportá y guardá el texto en un lugar seguro. Para restaurar, pegalo y tocá Importar.</small>
+ <textarea id="bk" style="margin-top:8px"></textarea>
+ <div class="acts"><button class="ghost" onclick="$('#bk').value=JSON.stringify(S)">Exportar</button><button class="ghost" onclick="imp()">Importar</button></div>`}
+function saveL(){['name','dni','addr','tel','city'].forEach(k=>S.lender[k]=$('#'+k).value.trim());save();$('#err').style.color='var(--ac)';$('#err').textContent='Datos guardados.'}
+function imp(){try{const d=JSON.parse($('#bk').value);if(!d.loans)throw 0;S=d;save();go('inicio')}catch(e){$('#err').style.color='var(--bad)';$('#err').textContent='El texto no es una copia válida.'}}
+
+function pdf(id){
+ const l=S.loans.find(x=>x.id==id),L=S.lender;
+ if(!window.jspdf){alert('Para generar el PDF hace falta conexión a internet.');return}
+ const doc=new window.jspdf.jsPDF({unit:'mm',format:'a4'});let y=20;
+ const P=(t,o={})=>{const s=o.s||11;doc.setFont('helvetica',o.b?'bold':'normal');doc.setFontSize(s);doc.splitTextToSize(t,170).forEach(x=>{if(y>275){doc.addPage();y=20}o.c?doc.text(x,105,{align:'center'}):doc.text(x,20,{align:o.j?'justify':'left'});y+=s*.4+1.4});y+=o.g==null?2:o.g};
+ const v=x=>x||'__________________';
+ P('CONTRATO DE PRÉSTAMO DE DINERO (MUTUO)',{c:1,b:1,s:15,g:6});
+ P(`En ${v(L.city)}, a ${fd(l.date)}, entre ${v(L.name)}, DNI ${v(L.dni)}, con domicilio en ${v(L.addr)}, teléfono ${v(L.tel)}, en adelante EL PRESTAMISTA, y ${v(l.name)}, DNI ${v(l.dni)}, con domicilio en ${v(l.addr)}, teléfono ${v(l.tel)}, en adelante EL DEUDOR, se celebra el presente contrato, que se rige por las siguientes cláusulas:`,{g:4});
+ P(`PRIMERA (capital): EL PRESTAMISTA entrega a EL DEUDOR la suma de ${money(l.capital)}, que EL DEUDOR declara recibir en este acto.`,{g:3});
+ P(`SEGUNDA (interés): el préstamo devenga un interés total del ${l.rate}% sobre el capital, por lo que EL DEUDOR devolverá en total ${money(l.total)}.`,{g:3});
+ P(`TERCERA (devolución): EL DEUDOR devolverá el total en ${l.cuotas.length} cuota${l.cuotas.length>1?'s':''} ${FREQ[l.freq]}, con los siguientes vencimientos:`,{g:2});
+ l.cuotas.forEach((c,i)=>{if(y>275){doc.addPage();y=20}doc.setFont('helvetica','normal');doc.setFontSize(11);doc.text('Cuota '+(i+1),28,y);doc.text(fd(c.due),70,y);doc.text(money(c.amt),115,y);y+=6});
+ y+=3;
+ P('CUARTA (pagos): cada pago deberá quedar acreditado por constancia escrita o transferencia a favor de EL PRESTAMISTA.',{g:3});
+ if(l.extra)P('QUINTA (cláusula adicional): '+l.extra,{g:3});
+ P('En prueba de conformidad, se firman dos ejemplares de un mismo tenor y a un solo efecto, en el lugar y fecha indicados al comienzo.',{g:2});
+ if(y>225){doc.addPage();y=20}
+ y+=28;doc.line(20,y,90,y);doc.line(120,y,190,y);y+=5;doc.setFontSize(10);
+ doc.text('EL PRESTAMISTA',20,y);doc.text('EL DEUDOR',120,y);y+=5;
+ doc.text('Aclaración: '+(L.name||''),20,y);doc.text('Aclaración: '+l.name,120,y);y+=5;
+ doc.text('DNI: '+(L.dni||''),20,y);doc.text('DNI: '+(l.dni||''),120,y);
+ const name='Contrato_'+l.name.replace(/\W+/g,'_')+'_'+l.date+'.pdf';
+ if(window.Android&&Android.savePdf){Android.savePdf(name,doc.output('datauristring').split(',')[1]);return}
+ try{const f=new File([doc.output('blob')],name,{type:'application/pdf'});
+  if(navigator.canShare&&navigator.canShare({files:[f]}))navigator.share({files:[f],title:name}).catch(()=>doc.save(name));else doc.save(name)}catch(e){doc.save(name)}
+}
+render();
+</script></body></html>
